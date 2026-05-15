@@ -346,6 +346,7 @@ const defaultBaseUrl = typeof window !== 'undefined' ? window.location.origin : 
 const providerWebhookHintMap: Record<string, string> = {
   stripe: 'admin.settings.payment.stripeWebhookHint',
   airwallex: 'admin.settings.payment.airwallexWebhookHint',
+  crossmint: 'admin.settings.payment.crossmintWebhookHint',
 }
 
 const providerWebhookUrl = computed(() => {
@@ -442,6 +443,14 @@ const paymentGuide = computed<PaymentGuide | null>(() => {
     return {
       summary: t('admin.settings.payment.airwallexGuideSummary'),
       note: t('admin.settings.payment.airwallexGuideNote'),
+      items: [],
+    }
+  }
+
+  if (form.provider_key === 'crossmint') {
+    return {
+      summary: t('admin.settings.payment.crossmintGuideSummary'),
+      note: t('admin.settings.payment.crossmintGuideNote'),
       items: [],
     }
   }

@@ -67,6 +67,12 @@ func (h *PaymentWebhookHandler) AirwallexWebhook(c *gin.Context) {
 	h.handleNotify(c, payment.TypeAirwallex)
 }
 
+// CrossmintWebhook handles Crossmint webhook events.
+// POST /api/v1/payment/webhook/crossmint
+func (h *PaymentWebhookHandler) CrossmintWebhook(c *gin.Context) {
+	h.handleNotify(c, payment.TypeCrossmint)
+}
+
 // handleNotify is the shared logic for all provider webhook handlers.
 func (h *PaymentWebhookHandler) handleNotify(c *gin.Context, providerKey string) {
 	var rawBody string
@@ -164,6 +170,45 @@ func extractOutTradeNo(rawBody, providerKey string) string {
 		if err := json.Unmarshal([]byte(rawBody), &payload); err == nil {
 			return strings.TrimSpace(payload.Data.Object.MerchantOrderID)
 		}
+	case payment.TypeCrossmint:
+		var payload struct {
+			Data struct {
+				OrderID       string            `json:"orderId"`
+				OrderIDAlt    string            `json:"order_id"`
+				ID            string            `json:"id"`
+				Metadata      map[string]string `json:"metadata"`
+				PassThrough   any               `json:"passThroughArgs"`
+				WhPassThrough any               `json:"whPassThroughArgs"`
+			} `json:"data"`
+			OrderID       string            `json:"orderId"`
+			OrderIDAlt    string            `json:"order_id"`
+			ID            string            `json:"id"`
+			Metadata      map[string]string `json:"metadata"`
+			PassThrough   any               `json:"passThroughArgs"`
+			WhPassThrough any               `json:"whPassThroughArgs"`
+		}
+		if err := json.Unmarshal([]byte(rawBody), &payload); err == nil {
+			for _, value := range []string{
+				payload.Data.Metadata["order_id"],
+				payload.Data.Metadata["orderId"],
+				payload.Metadata["order_id"],
+				payload.Metadata["orderId"],
+				crossmintOrderIDFromPassThrough(payload.Data.WhPassThrough),
+				crossmintOrderIDFromPassThrough(payload.Data.PassThrough),
+				crossmintOrderIDFromPassThrough(payload.WhPassThrough),
+				crossmintOrderIDFromPassThrough(payload.PassThrough),
+				payload.Data.OrderID,
+				payload.Data.OrderIDAlt,
+				payload.Data.ID,
+				payload.OrderID,
+				payload.OrderIDAlt,
+				payload.ID,
+			} {
+				if strings.TrimSpace(value) != "" {
+					return strings.TrimSpace(value)
+				}
+			}
+		}
 	}
 	// For other providers (Stripe, Alipay direct, WxPay direct), the registry
 	// typically has only one instance, so no instance lookup is needed.
@@ -203,14 +248,31 @@ const (
 
 // writeSuccessResponse 返回各支付服务商要求的成功响应。
 // 微信支付需要 JSON {"code":"SUCCESS","message":"成功"}；
-// Stripe 和空中云汇接受空 200，其它服务商接受纯文本 "success"。
+// Stripe、空中云汇和 Crossmint 接受空 200，其它服务商接受纯文本 "success"。
 func writeSuccessResponse(c *gin.Context, providerKey string) {
 	switch providerKey {
 	case payment.TypeWxpay:
 		c.JSON(http.StatusOK, wxpaySuccessResponse{Code: wxpaySuccessCode, Message: wxpaySuccessMessage})
-	case payment.TypeStripe, payment.TypeAirwallex:
+	case payment.TypeStripe, payment.TypeAirwallex, payment.TypeCrossmint:
 		c.String(http.StatusOK, "")
 	default:
 		c.String(http.StatusOK, "success")
 	}
+}
+
+func crossmintOrderIDFromPassThrough(raw any) string {
+	switch v := raw.(type) {
+	case map[string]any:
+		for _, key := range []string{"order_id", "orderId", "out_trade_no"} {
+			if value, ok := v[key].(string); ok && strings.TrimSpace(value) != "" {
+				return strings.TrimSpace(value)
+			}
+		}
+	case string:
+		var m map[string]any
+		if err := json.Unmarshal([]byte(v), &m); err == nil {
+			return crossmintOrderIDFromPassThrough(m)
+		}
+	}
+	return ""
 }

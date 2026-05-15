@@ -50,3 +50,17 @@ describe('PROVIDER_CONFIG_FIELDS.stripe', () => {
     expect(currency?.options).toBe(PAYMENT_CURRENCY_OPTIONS)
   })
 })
+
+describe('PROVIDER_CONFIG_FIELDS.crossmint', () => {
+  it('adds hosted checkout credentials and USD as the default currency', () => {
+    expect(findField('crossmint', 'apiKey')?.sensitive).toBe(true)
+    expect(findField('crossmint', 'webhookSecret')?.sensitive).toBe(true)
+    expect(findField('crossmint', 'clientId')?.sensitive).toBe(false)
+    expect(findField('crossmint', 'listingId')?.sensitive).toBe(false)
+
+    const currency = findField('crossmint', 'currency')
+    expect(currency?.defaultValue).toBe('USD')
+    expect(currency?.hintKey).toBe('admin.settings.payment.field_crossmintCurrencyHint')
+    expect(currency?.options).toBe(PAYMENT_CURRENCY_OPTIONS)
+  })
+})
